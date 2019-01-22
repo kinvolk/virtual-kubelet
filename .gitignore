@@ -9,6 +9,8 @@ bin/
 *.pem
 !hack/skaffold/virtual-kubelet/vkubelet-mock-0-crt.pem
 !hack/skaffold/virtual-kubelet/vkubelet-mock-0-key.pem
+!hack/tinc/vkubelet-tinc-0-crt.pem
+!hack/tinc/vkubelet-tinc-0-key.pem
 
 # Test binary, build with `go test -c`
 *.test

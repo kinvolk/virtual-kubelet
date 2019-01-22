@@ -1,0 +1,10 @@
+{
+  "virtual-kubelet": {
+    "autoconnect": "true",
+    "connectto": "10.1.1.1",
+    "device": "/dev/net/tun",
+    "devicetype": "tap",
+    "mode": "switch",
+    "name": "tinc-vk"
+  }
+}
