@@ -12,6 +12,6 @@ VKUBELET_POD_IP=$(minikube ip) \
 APISERVER_CERT_LOCATION=$VK_SRC/hack/tinc/vkubelet-tinc-0-crt.pem \
 APISERVER_KEY_LOCATION=$VK_SRC/hack/tinc/vkubelet-tinc-0-key.pem \
 $VK_BINPATH --provider=tinc --provider-config=$VK_SRC/hack/tinc/vk-tinc.json \
---kubeconfig=$KUBECONFIG --namespace=default --node-name=vkubelet-tinc-0
+--kubeconfig=$KUBECONFIG --namespace=default --nodename=vkubelet-tinc-0
 ```
 
