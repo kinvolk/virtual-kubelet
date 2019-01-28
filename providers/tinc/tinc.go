@@ -33,8 +33,8 @@ const (
 	tincContainerName string = "tinc-vk"
 	tincImageName     string = "dongsupark/tinc"
 
-	tincStartupConfigHost      string = "/tmp/vk-startup-config.yaml"
-	tincStartupConfigContainer string = "/environment/default.startup.yaml"
+	tincStartupConfigHost      string = "/tmp/vk-startup-config.conf"
+	tincStartupConfigContainer string = "/environment/default.startup.conf"
 
 	dockerClient = "/usr/bin/docker"
 
@@ -367,20 +367,18 @@ func (p *TincProvider) GetStatsSummary(ctx context.Context) (*stats.Summary, err
 
 // createStartupConfig accepts a Pod definition and stores it in memory.
 func (p *TincProvider) createStartupConfig() error {
-	data := "TINC_RUN_BEFORE_START_COMMANDS:\n"
+	data := fmt.Sprintf("add Address = %s\n", p.tincAddress)
+	data += fmt.Sprintf("add Subnet = %s\n", p.tincSubnet)
+	data += fmt.Sprintf("add Port = %s\n", p.tincPort)
 
-	data += fmt.Sprintf("  - add Address = %s\n", p.tincAddress)
-	data += fmt.Sprintf("  - add Subnet = %s\n", p.tincSubnet)
-	data += fmt.Sprintf("  - add Port = %s\n", p.tincPort)
+	data += fmt.Sprintf("add AutoConnect = %s\n", p.config.AutoConnect)
+	data += fmt.Sprintf("add ConnectTo = %s\n", p.config.ConnectTo)
+	data += fmt.Sprintf("add Device = %s\n", p.config.Device)
+	data += fmt.Sprintf("add DeviceType = %s\n", p.config.DeviceType)
+	data += fmt.Sprintf("add Mode = %s\n", p.config.Mode)
+	data += fmt.Sprintf("add Name = %s\n", p.config.Name)
 
-	data += fmt.Sprintf("  - add AutoConnect = %s\n", p.config.AutoConnect)
-	data += fmt.Sprintf("  - add ConnectTo = %s\n", p.config.ConnectTo)
-	data += fmt.Sprintf("  - add Device = %s\n", p.config.Device)
-	data += fmt.Sprintf("  - add DeviceType = %s\n", p.config.DeviceType)
-	data += fmt.Sprintf("  - add Mode = %s\n", p.config.Mode)
-	data += fmt.Sprintf("  - add Name = %s\n", p.config.Name)
-
-	if err := ioutil.WriteFile("/tmp/vk-startup-config.yaml", []byte(data), os.FileMode(0644)); err != nil {
+	if err := ioutil.WriteFile(tincStartupConfigHost, []byte(data), os.FileMode(0644)); err != nil {
 		return err
 	}
 
