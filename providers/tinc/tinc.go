@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/cpuguy83/strongerrors"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	tincAutoConnect string = "true"
+	tincAutoConnect string = "yes"
 
 	tincModeRouter string = "router"
 	tincModeSwitch string = "switch"
@@ -30,7 +31,7 @@ const (
 	tincDeviceTypeDummy string = "dummy"
 	tincDeviceTypeTap   string = "tap"
 
-	tincContainerName string = "tinc-vk"
+	tincContainerName string = "nodemain"
 	tincImageName     string = "dongsupark/tinc"
 
 	tincStartupConfigHost      string = "/tmp/vk-startup-config.conf"
@@ -38,11 +39,12 @@ const (
 
 	dockerClient = "/usr/bin/docker"
 
-	// DefaultTincRemoteAddress is an IP address of the remote host to be connected
-	DefaultTincRemoteAddress string = "10.1.1.1"
+	// DefaultTincRemotePeers is a list of remote hostnames to be connected.
+	// Space-separated: e.g. "nodepeer1 nodepeer2"
+	DefaultTincRemotePeers string = "nodepeer"
 
 	// DefaultTincSubnet is a subnetwork for the test nodes
-	DefaultTincSubnet string = "10.244.1.0/24"
+	DefaultTincSubnet string = "10.1.1.0/24"
 
 	// DefaultTincPort is the default port number Tinc VPN listens on
 	DefaultTincPort int32 = 655
@@ -104,7 +106,7 @@ func loadConfig(providerConfig, nodeName string) (config TincConfig, err error) 
 			config.AutoConnect = tincAutoConnect
 		}
 		if config.ConnectTo == "" {
-			config.ConnectTo = DefaultTincRemoteAddress
+			config.ConnectTo = DefaultTincRemotePeers
 		}
 		if config.Device == "" {
 			config.Device = tincDeviceTunTap
@@ -367,16 +369,26 @@ func (p *TincProvider) GetStatsSummary(ctx context.Context) (*stats.Summary, err
 
 // createStartupConfig accepts a Pod definition and stores it in memory.
 func (p *TincProvider) createStartupConfig() error {
-	data := fmt.Sprintf("add Address = %s\n", p.tincAddress)
-	data += fmt.Sprintf("add Subnet = %s\n", p.tincSubnet)
-	data += fmt.Sprintf("add Port = %s\n", p.tincPort)
-
-	data += fmt.Sprintf("add AutoConnect = %s\n", p.config.AutoConnect)
+	data := fmt.Sprintf("add AutoConnect = %s\n", p.config.AutoConnect)
 	data += fmt.Sprintf("add ConnectTo = %s\n", p.config.ConnectTo)
 	data += fmt.Sprintf("add Device = %s\n", p.config.Device)
 	data += fmt.Sprintf("add DeviceType = %s\n", p.config.DeviceType)
 	data += fmt.Sprintf("add Mode = %s\n", p.config.Mode)
 	data += fmt.Sprintf("add Name = %s\n", p.config.Name)
+
+	nodeMain := p.config.Name
+
+	data += fmt.Sprintf("add %s.Address = %s\n", nodeMain, p.tincAddress)
+	data += fmt.Sprintf("add %s.Subnet = %s\n", nodeMain, p.tincSubnet)
+	data += fmt.Sprintf("add %s.Port = %s\n", nodeMain, p.tincPort)
+
+	nodePeers := strings.Fields(DefaultTincRemotePeers)
+
+	for _, nodePeer := range nodePeers {
+		data += fmt.Sprintf("add %s.Address = %s\n", nodePeer, p.tincAddress)
+		data += fmt.Sprintf("add %s.Subnet = %s\n", nodePeer, p.tincSubnet)
+		data += fmt.Sprintf("add %s.Port = %s\n", nodePeer, p.tincPort)
+	}
 
 	if err := ioutil.WriteFile(tincStartupConfigHost, []byte(data), os.FileMode(0644)); err != nil {
 		return err
