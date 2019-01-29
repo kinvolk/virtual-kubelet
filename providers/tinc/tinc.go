@@ -35,6 +35,8 @@ const (
 	tincDeviceTypeDummy string = "dummy"
 	tincDeviceTypeTap   string = "tap"
 
+	tincExperimentalProtocol string = "no"
+
 	tincImageName string = "quay.io/dongsupark/tinc"
 
 	dockerClient = "/usr/bin/docker"
@@ -97,12 +99,13 @@ type TincProvider struct {
 
 // TincConfig contains a tinc virtual-kubelet's configurable parameters.
 type TincConfig struct {
-	AutoConnect string `json:"autoconnect,omitempty"`
-	ConnectTo   string `json:"connect,omitempty"`
-	Device      string `json:"device,omitempty"`
-	DeviceType  string `json:"devicetype,omitempty"`
-	Mode        string `json:"mode,omitempty"`
-	Name        string `json:"name,omitempty"`
+	AutoConnect          string `json:"autoconnect,omitempty"`
+	ConnectTo            string `json:"connect,omitempty"`
+	Device               string `json:"device,omitempty"`
+	DeviceType           string `json:"devicetype,omitempty"`
+	ExperimentalProtocol string `json:"experimentalprotocol,omitempty"`
+	Mode                 string `json:"mode,omitempty"`
+	Name                 string `json:"name,omitempty"`
 
 	CPU    string `json:"cpu,omitempty"`
 	Memory string `json:"memory,omitempty"`
@@ -153,6 +156,9 @@ func loadConfig(providerConfig, nodeName string) (config TincConfig, err error) 
 		}
 		if config.DeviceType == "" {
 			config.DeviceType = tincDeviceTypeTap
+		}
+		if config.ExperimentalProtocol == "" {
+			config.ExperimentalProtocol = tincExperimentalProtocol
 		}
 		if config.Mode == "" {
 			config.Mode = tincModeSwitch
@@ -460,6 +466,7 @@ func (p *TincProvider) createStartupConfig() error {
 	data += fmt.Sprintf("add ConnectTo = %s\n", tincPeerName)
 	data += fmt.Sprintf("add Device = %s\n", p.config.Device)
 	data += fmt.Sprintf("add DeviceType = %s\n", p.config.DeviceType)
+	data += fmt.Sprintf("add ExperimentalProtocol = %s\n", p.config.ExperimentalProtocol)
 	data += fmt.Sprintf("add Mode = %s\n", p.config.Mode)
 	data += fmt.Sprintf("add Name = %s\n", tincMainName)
 

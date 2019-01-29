@@ -1,9 +1,10 @@
 {
   "vkubelet-tinc-0": {
-    "autoconnect": "true",
+    "autoconnect": "yes",
     "connectto": "10.1.1.2",
     "device": "/dev/net/tun",
     "devicetype": "tap",
+    "experimentalprotocol": "no",
     "mode": "switch",
     "name": "nodemain",
     "cpu": "2",
