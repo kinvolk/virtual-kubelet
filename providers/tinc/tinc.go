@@ -14,10 +14,13 @@ import (
 
 	"github.com/cpuguy83/strongerrors"
 	"k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/remotecommand"
 	stats "k8s.io/kubernetes/pkg/kubelet/apis/stats/v1alpha1"
+
+	"github.com/virtual-kubelet/virtual-kubelet/providers"
 )
 
 const (
@@ -38,6 +41,11 @@ const (
 	tincStartupConfigContainer string = "/environment/default.startup.conf"
 
 	dockerClient = "/usr/bin/docker"
+
+	// Provider configuration defaults.
+	defaultCPUCapacity    = "20"
+	defaultMemoryCapacity = "100Gi"
+	defaultPodCapacity    = "20"
 
 	// DefaultTincRemotePeers is a list of remote hostnames to be connected.
 	// Space-separated: e.g. "nodepeer1 nodepeer2"
@@ -68,6 +76,10 @@ type TincConfig struct {
 	DeviceType  string `json:"devicetype,omitempty"`
 	Mode        string `json:"mode,omitempty"`
 	Name        string `json:"name,omitempty"`
+
+	CPU    string `json:"cpu,omitempty"`
+	Memory string `json:"memory,omitempty"`
+	Pods   string `json:"pods,omitempty"`
 }
 
 // NewTincProvider creates a new TincProvider
@@ -120,8 +132,26 @@ func loadConfig(providerConfig, nodeName string) (config TincConfig, err error) 
 		if config.Name == "" {
 			config.Name = tincContainerName
 		}
+		if config.CPU == "" {
+			config.CPU = defaultCPUCapacity
+		}
+		if config.Memory == "" {
+			config.Memory = defaultMemoryCapacity
+		}
+		if config.Pods == "" {
+			config.Pods = defaultPodCapacity
+		}
 	}
 
+	if _, err = resource.ParseQuantity(config.CPU); err != nil {
+		return config, fmt.Errorf("Invalid CPU value %v", config.CPU)
+	}
+	if _, err = resource.ParseQuantity(config.Memory); err != nil {
+		return config, fmt.Errorf("Invalid memory value %v", config.Memory)
+	}
+	if _, err = resource.ParseQuantity(config.Pods); err != nil {
+		return config, fmt.Errorf("Invalid pods value %v", config.Pods)
+	}
 	return config, nil
 }
 
@@ -282,8 +312,13 @@ func (p *TincProvider) GetPods(ctx context.Context) ([]*v1.Pod, error) {
 }
 
 // Capacity returns a resource list containing the capacity limits.
+// It must contain "pods" at least, so that the provider gets registered.
 func (p *TincProvider) Capacity(ctx context.Context) v1.ResourceList {
-	return v1.ResourceList{}
+	return v1.ResourceList{
+		"cpu":    resource.MustParse(p.config.CPU),
+		"memory": resource.MustParse(p.config.Memory),
+		"pods":   resource.MustParse(p.config.Pods),
+	}
 }
 
 // NodeConditions returns a list of conditions (Ready, OutOfDisk, etc), for updates to the node status
@@ -358,7 +393,7 @@ func (p *TincProvider) NodeDaemonEndpoints(ctx context.Context) *v1.NodeDaemonEn
 // OperatingSystem returns the operating system for this provider.
 // This is a noop to default to Linux for now.
 func (p *TincProvider) OperatingSystem() string {
-	return ""
+	return providers.OperatingSystemLinux
 }
 
 // GetStatsSummary returns dummy stats for all pods known by this provider.

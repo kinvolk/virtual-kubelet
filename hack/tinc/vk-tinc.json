@@ -1,10 +1,13 @@
 {
-  "virtual-kubelet": {
+  "vkubelet-tinc-0": {
     "autoconnect": "true",
     "connectto": "10.1.1.1",
     "device": "/dev/net/tun",
     "devicetype": "tap",
     "mode": "switch",
-    "name": "tinc-vk"
+    "name": "tinc-vk",
+    "cpu": "2",
+    "memory": "32Gi",
+    "pods": "128"
   }
 }
