@@ -1,7 +1,7 @@
 {
   "vkubelet-tinc-0": {
     "autoconnect": "true",
-    "connectto": "10.1.1.1",
+    "connectto": "10.1.1.2",
     "device": "/dev/net/tun",
     "devicetype": "tap",
     "mode": "switch",

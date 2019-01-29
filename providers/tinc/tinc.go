@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,11 +35,7 @@ const (
 	tincDeviceTypeDummy string = "dummy"
 	tincDeviceTypeTap   string = "tap"
 
-	tincContainerName string = "nodemain"
-	tincImageName     string = "quay.io/dongsupark/tinc"
-
-	tincStartupConfigHost      string = "/tmp/vk-startup-config.conf"
-	tincStartupConfigContainer string = "/environment/default.startup.conf"
+	tincImageName string = "quay.io/dongsupark/tinc"
 
 	dockerClient = "/usr/bin/docker"
 
@@ -47,15 +44,45 @@ const (
 	defaultMemoryCapacity = "100Gi"
 	defaultPodCapacity    = "20"
 
-	// DefaultTincRemotePeers is a list of remote hostnames to be connected.
-	// Space-separated: e.g. "nodepeer1 nodepeer2"
+	// DefaultTincMainAddress is a name of the main node
+	DefaultTincMainName string = "nodemain"
+
+	// DefaultTincRemotePeers a remote hostname to be connected
 	DefaultTincRemotePeers string = "nodepeer"
+
+	// DefaultTincMainAddress is a public address of the main node
+	DefaultTincMainAddress string = "172.17.0.2"
+	// DefaultTincPeerAddress is a public address of the peer node
+	DefaultTincPeerAddress string = "172.17.0.3"
+
+	// DefaultTincMainAddress is a public address of the main node
+	DefaultTincMainPrivateAddress string = "10.1.1.1"
+	// DefaultTincPeerAddress is a public address of the peer node
+	DefaultTincPeerPrivateAddress string = "10.1.1.2"
 
 	// DefaultTincSubnet is a subnetwork for the test nodes
 	DefaultTincSubnet string = "10.1.1.0/24"
 
 	// DefaultTincPort is the default port number Tinc VPN listens on
 	DefaultTincPort int32 = 655
+)
+
+var (
+	myAddress      string = DefaultTincMainAddress
+	peerAddress    string = DefaultTincPeerAddress
+	privateAddress string = DefaultTincMainPrivateAddress
+
+	tincMainName string = DefaultTincMainName
+	tincPeerName string = DefaultTincRemotePeers
+
+	tincStartupConfigHost      string = ""
+	tincStartupConfigContainer string = "/environment/default.startup.conf"
+
+	tincMainConfigHost      string = ""
+	tincMainConfigContainer string = "/service/tinc/data/tinc.conf"
+
+	tincUpScriptHost      string = ""
+	tincUpScriptContainer string = "/service/tinc/data/tinc-up"
 )
 
 // TincProvider implements the virtual-kubelet provider interface and stores pods in memory.
@@ -97,6 +124,7 @@ func NewTincProvider(providerConfig, nodeName, tincAddress, tincSubnet string, t
 		pods:        make(map[string]*v1.Pod),
 		config:      config,
 	}
+
 	return &provider, nil
 }
 
@@ -130,7 +158,7 @@ func loadConfig(providerConfig, nodeName string) (config TincConfig, err error) 
 			config.Mode = tincModeSwitch
 		}
 		if config.Name == "" {
-			config.Name = tincContainerName
+			config.Name = tincMainName
 		}
 		if config.CPU == "" {
 			config.CPU = defaultCPUCapacity
@@ -166,15 +194,31 @@ func (p *TincProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 
 	p.pods[key] = pod
 
+	if vpnMode := pod.Annotations["vpnmode"]; vpnMode == "peer" {
+		privateAddress = DefaultTincPeerPrivateAddress
+		tincMainName = DefaultTincRemotePeers
+		tincPeerName = DefaultTincMainName
+	} else {
+		privateAddress = DefaultTincMainPrivateAddress
+		tincMainName = DefaultTincMainName
+		tincPeerName = DefaultTincRemotePeers
+	}
+
+	tincStartupConfigHost = filepath.Join("/tmp", tincMainName, "vk-startup-config.conf")
+	tincMainConfigHost = filepath.Join("/tmp", tincMainName, "vk-main.conf")
+	tincUpScriptHost = filepath.Join("/tmp", tincMainName, "vk-tinc-up")
+
 	if err := p.createStartupConfig(); err != nil {
 		return err
 	}
 
-	_, _ = exec.Command(dockerClient, "rm", "--force", p.config.Name).Output()
+	_, _ = exec.Command(dockerClient, "rm", "--force", tincMainName).Output()
 
-	out, err := exec.Command(dockerClient, "run", "--privileged", "--name="+p.config.Name,
+	out, err := exec.Command(dockerClient, "run", "--privileged", "--name="+tincMainName,
 		"--detach", "--rm",
 		fmt.Sprintf("--volume=%s:%s", tincStartupConfigHost, tincStartupConfigContainer),
+		fmt.Sprintf("--volume=%s:%s", tincMainConfigHost, tincMainConfigContainer),
+		fmt.Sprintf("--volume=%s:%s", tincUpScriptHost, tincUpScriptContainer),
 		tincImageName).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to run docker-run:\nout: %s\nerr: %v\n", string(out), err)
@@ -212,7 +256,7 @@ func (p *TincProvider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 
 	delete(p.pods, key)
 
-	fmt.Printf("running docker-rm %s\n", p.config.Name)
+	fmt.Printf("running docker-rm %s\n", tincMainName)
 
 	out, err := exec.Command(dockerClient, "rm", "--force", p.config.Name).CombinedOutput()
 	if err != nil {
@@ -411,28 +455,56 @@ func (p *TincProvider) GetStatsSummary(ctx context.Context) (*stats.Summary, err
 
 // createStartupConfig accepts a Pod definition and stores it in memory.
 func (p *TincProvider) createStartupConfig() error {
+	// /tmp/.../vk-startup-config.conf
 	data := fmt.Sprintf("add AutoConnect = %s\n", p.config.AutoConnect)
-	data += fmt.Sprintf("add ConnectTo = %s\n", p.config.ConnectTo)
+	data += fmt.Sprintf("add ConnectTo = %s\n", tincPeerName)
 	data += fmt.Sprintf("add Device = %s\n", p.config.Device)
 	data += fmt.Sprintf("add DeviceType = %s\n", p.config.DeviceType)
 	data += fmt.Sprintf("add Mode = %s\n", p.config.Mode)
-	data += fmt.Sprintf("add Name = %s\n", p.config.Name)
+	data += fmt.Sprintf("add Name = %s\n", tincMainName)
 
 	nodeMain := p.config.Name
 
-	data += fmt.Sprintf("add %s.Address = %s\n", nodeMain, p.tincAddress)
+	data += fmt.Sprintf("add %s.Address = %s\n", nodeMain, myAddress)
 	data += fmt.Sprintf("add %s.Subnet = %s\n", nodeMain, p.tincSubnet)
 	data += fmt.Sprintf("add %s.Port = %d\n", nodeMain, p.tincPort)
+
+	if err := os.MkdirAll(filepath.Join("/tmp", tincMainName), os.FileMode(0775)); err != nil {
+		return err
+	}
 
 	nodePeers := strings.Fields(DefaultTincRemotePeers)
 
 	for _, nodePeer := range nodePeers {
-		data += fmt.Sprintf("add %s.Address = %s\n", nodePeer, p.tincAddress)
+		data += fmt.Sprintf("add %s.Address = %s\n", nodePeer, peerAddress)
 		data += fmt.Sprintf("add %s.Subnet = %s\n", nodePeer, p.tincSubnet)
 		data += fmt.Sprintf("add %s.Port = %d\n", nodePeer, p.tincPort)
 	}
 
 	if err := ioutil.WriteFile(tincStartupConfigHost, []byte(data), os.FileMode(0644)); err != nil {
+		return err
+	}
+
+	// /tmp/.../vk-main.conf
+	dataMain := fmt.Sprintf("AutoConnect = %s\n", p.config.AutoConnect)
+	dataMain += fmt.Sprintf("ConnectTo = %s\n", tincPeerName)
+	dataMain += fmt.Sprintf("Device = %s\n", p.config.Device)
+	dataMain += fmt.Sprintf("DeviceType = %s\n", p.config.DeviceType)
+	dataMain += fmt.Sprintf("ExperimentalProtocol = %s\n", p.config.ExperimentalProtocol)
+	dataMain += fmt.Sprintf("Mode = %s\n", p.config.Mode)
+	dataMain += fmt.Sprintf("Name = %s\n", tincMainName)
+
+	if err := ioutil.WriteFile(tincMainConfigHost, []byte(dataMain), os.FileMode(0644)); err != nil {
+		return err
+	}
+
+	// /tmp/.../vk-tinc-up
+
+	dataScr := fmt.Sprintf("#!/bin/bash\n")
+	dataScr += fmt.Sprintf("ip link set tap0 up\n")
+	dataScr += fmt.Sprintf("ip addr add %s/24 dev tap0\n", privateAddress)
+
+	if err := ioutil.WriteFile(tincUpScriptHost, []byte(dataScr), os.FileMode(0755)); err != nil {
 		return err
 	}
 
