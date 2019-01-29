@@ -4,6 +4,7 @@ DOCKER_IMAGE := virtual-kubelet
 exec := $(DOCKER_IMAGE)
 github_repo := virtual-kubelet/virtual-kubelet
 binary := virtual-kubelet
+VK_BUILD_TAGS := no_alibabacloud_provider no_aws_provider no_azure_provider no_azurebatch_provider no_cri_provider no_huawei_provider no_hyper_provider no_vic_provider no_web_provider
 build_tags := "netgo osusergo $(VK_BUILD_TAGS)"
 
 # comment this line out for quieter things

@@ -35,7 +35,7 @@ const (
 	tincDeviceTypeTap   string = "tap"
 
 	tincContainerName string = "nodemain"
-	tincImageName     string = "dongsupark/tinc"
+	tincImageName     string = "quay.io/dongsupark/tinc"
 
 	tincStartupConfigHost      string = "/tmp/vk-startup-config.conf"
 	tincStartupConfigContainer string = "/environment/default.startup.conf"
@@ -170,10 +170,14 @@ func (p *TincProvider) CreatePod(ctx context.Context, pod *v1.Pod) error {
 		return err
 	}
 
-	if _, err := exec.Command(dockerClient, "run", "--privileged", "--name="+p.config.Name, "-ti", "--rm",
+	_, _ = exec.Command(dockerClient, "rm", "--force", p.config.Name).Output()
+
+	out, err := exec.Command(dockerClient, "run", "--privileged", "--name="+p.config.Name,
+		"--detach", "--rm",
 		fmt.Sprintf("--volume=%s:%s", tincStartupConfigHost, tincStartupConfigContainer),
-		tincImageName).Output(); err != nil {
-		return err
+		tincImageName).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to run docker-run:\nout: %s\nerr: %v\n", string(out), err)
 	}
 
 	return nil
@@ -208,8 +212,11 @@ func (p *TincProvider) DeletePod(ctx context.Context, pod *v1.Pod) (err error) {
 
 	delete(p.pods, key)
 
-	if _, err := exec.Command(dockerClient, "rm", p.config.Name).Output(); err != nil {
-		return err
+	fmt.Printf("running docker-rm %s\n", p.config.Name)
+
+	out, err := exec.Command(dockerClient, "rm", "--force", p.config.Name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to run docker-rm:\nout: %s\nerr: %v\n", string(out), err)
 	}
 
 	return nil
@@ -415,14 +422,14 @@ func (p *TincProvider) createStartupConfig() error {
 
 	data += fmt.Sprintf("add %s.Address = %s\n", nodeMain, p.tincAddress)
 	data += fmt.Sprintf("add %s.Subnet = %s\n", nodeMain, p.tincSubnet)
-	data += fmt.Sprintf("add %s.Port = %s\n", nodeMain, p.tincPort)
+	data += fmt.Sprintf("add %s.Port = %d\n", nodeMain, p.tincPort)
 
 	nodePeers := strings.Fields(DefaultTincRemotePeers)
 
 	for _, nodePeer := range nodePeers {
 		data += fmt.Sprintf("add %s.Address = %s\n", nodePeer, p.tincAddress)
 		data += fmt.Sprintf("add %s.Subnet = %s\n", nodePeer, p.tincSubnet)
-		data += fmt.Sprintf("add %s.Port = %s\n", nodePeer, p.tincPort)
+		data += fmt.Sprintf("add %s.Port = %d\n", nodePeer, p.tincPort)
 	}
 
 	if err := ioutil.WriteFile(tincStartupConfigHost, []byte(data), os.FileMode(0644)); err != nil {
