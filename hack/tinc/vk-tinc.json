@@ -1,7 +1,7 @@
 {
   "vkubelet-tinc-0": {
     "autoconnect": "yes",
-    "connectto": "10.1.1.2",
+    "connectto": "nodepeer",
     "device": "/dev/net/tun",
     "devicetype": "tap",
     "experimentalprotocol": "no",
